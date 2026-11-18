@@ -84,16 +84,16 @@
 # ------------------------------------------------------------------
 # 5. fail2ban
 # ------------------------------------------------------------------
-- name: fail2ban konfigurieren
+- name: Fail2ban konfigurieren
   ansible.builtin.template:
     src: jail.local.j2
     dest: /etc/fail2ban/jail.local
     owner: root
     group: root
     mode: "0644"
-  notify: fail2ban neu starten
+  notify: Fail2ban neu starten
 
-- name: fail2ban aktivieren
+- name: Fail2ban aktivieren
   ansible.builtin.systemd_service:
     name: fail2ban
     enabled: true

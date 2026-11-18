@@ -10,7 +10,7 @@
     name: ssh
     state: reloaded
 
-- name: fail2ban neu starten
+- name: Fail2ban neu starten
   ansible.builtin.systemd_service:
     name: fail2ban
     state: restarted
