@@ -1,0 +1,16 @@
+---
+# Reihenfolge wichtig: erst prüfen, dann neu laden.
+# Schlägt die Prüfung fehl, bricht Ansible ab und SSH läuft mit der alten Konfiguration weiter.
+- name: SSH-Konfiguration prüfen
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: SSH neu laden
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded
+
+- name: fail2ban neu starten
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    state: restarted

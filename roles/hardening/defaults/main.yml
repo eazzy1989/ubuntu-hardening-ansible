@@ -1,0 +1,25 @@
+---
+# Netze, aus denen SSH erlaubt ist
+hardening_ssh_allowed_networks:
+  - 192.168.1.0/24
+
+# Weitere freizugebende Ports
+# source weglassen = von überall erlauben
+hardening_ufw_rules:
+  - { port: "80", proto: tcp, comment: "HTTP" }
+  - { port: "443", proto: tcp, comment: "HTTPS" }
+
+# SSH
+hardening_ssh_password_authentication: false
+hardening_ssh_permit_root_login: "no"
+hardening_ssh_max_auth_tries: 3
+
+# fail2ban
+hardening_fail2ban_bantime: 1h
+hardening_fail2ban_findtime: 10m
+hardening_fail2ban_maxretry: 5
+
+# Automatische Sicherheitsupdates
+hardening_unattended_upgrades: true
+hardening_unattended_reboot: false
+hardening_unattended_reboot_time: "03:30"

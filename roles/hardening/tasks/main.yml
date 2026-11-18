@@ -1,0 +1,112 @@
+---
+# ------------------------------------------------------------------
+# 1. Sicherheitsprüfung: Ohne hinterlegten SSH-Schlüssel würde das
+#    Abschalten des Passwort-Logins den Admin aussperren.
+# ------------------------------------------------------------------
+- name: Home-Verzeichnis des Admin-Benutzers ermitteln
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+
+- name: Prüfen, ob für den Admin-Benutzer ein SSH-Schlüssel hinterlegt ist
+  ansible.builtin.stat:
+    path: "{{ ansible_facts.getent_passwd[ansible_user][4] }}/.ssh/authorized_keys"
+  register: hardening_authorized_keys
+
+- name: Abbrechen, wenn kein SSH-Schlüssel vorhanden ist
+  ansible.builtin.assert:
+    that:
+      - hardening_ssh_password_authentication or (hardening_authorized_keys.stat.exists and hardening_authorized_keys.stat.size > 0)
+    fail_msg: >-
+      Für {{ ansible_user }} ist kein SSH-Schlüssel hinterlegt. Der Passwort-Login
+      wird deshalb nicht abgeschaltet – zuerst ssh-copy-id ausführen.
+
+# ------------------------------------------------------------------
+# 2. Pakete
+# ------------------------------------------------------------------
+- name: Sicherheitspakete installieren
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# ------------------------------------------------------------------
+# 3. Firewall – SSH wird freigegeben, BEVOR ufw aktiviert wird
+# ------------------------------------------------------------------
+- name: SSH aus den Admin-Netzen erlauben
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    from_ip: "{{ item }}"
+    comment: "SSH Admin"
+  loop: "{{ hardening_ssh_allowed_networks }}"
+
+- name: Weitere Ports freigeben
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto | default('tcp') }}"
+    from_ip: "{{ item.source | default('any') }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ hardening_ufw_rules }}"
+
+- name: Eingehend standardmäßig verweigern, ausgehend erlauben
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    default: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: Firewall aktivieren
+  community.general.ufw:
+    state: enabled
+
+# ------------------------------------------------------------------
+# 4. SSH härten (eigene Datei mit 00- vorne, damit sie Vorrang hat)
+# ------------------------------------------------------------------
+- name: SSH-Härtung schreiben
+  ansible.builtin.template:
+    src: 00-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - SSH-Konfiguration prüfen
+    - SSH neu laden
+
+# ------------------------------------------------------------------
+# 5. fail2ban
+# ------------------------------------------------------------------
+- name: fail2ban konfigurieren
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: fail2ban neu starten
+
+- name: fail2ban aktivieren
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: started
+
+# ------------------------------------------------------------------
+# 6. Automatische Sicherheitsupdates
+# ------------------------------------------------------------------
+- name: Automatische Updates konfigurieren
+  ansible.builtin.template:
+    src: 52-hardening-unattended.j2
+    dest: /etc/apt/apt.conf.d/52-hardening-unattended
+    owner: root
+    group: root
+    mode: "0644"
+  when: hardening_unattended_upgrades
